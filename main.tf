@@ -100,9 +100,9 @@ resource "azurerm_storage_account" "storage" {
 resource "azurerm_log_analytics_workspace" "law" {
   name                = "workspace-nuq-epm-2024"
   location            = "polandcentral"
-  resource_group_name = azurerm_resource_group.product_service_rg.name
-  sku                 = "PerGB2018"
-  retention_in_days   = 10
+  resource_group_name = azurerm_resource_group.training.name
+  sku                 = "Free"
+  retention_in_days   = 30
 }
 
 resource "azurerm_application_insights" "products_service_fa" {
@@ -127,23 +127,31 @@ resource "azurerm_app_service_plan" "product_service_plan" {
   resource_group_name = azurerm_resource_group.training.name
 
   kind = "FunctionApp"
-
+  
   sku {
     size = "Y1"
     tier = "Dynamic"
-  }
+  } 
 
   tags = {
     environment = "training"
   }
 }
 
+resource "azurerm_function_app" "product_service_plan_function" {
+  name                       = "sp-nuq-epm-2024-function"
+  location                   = "polandcentral"
+  resource_group_name        = azurerm_resource_group.training.name
+  app_service_plan_id        = azurerm_app_service_plan.product_service_plan.id
+  storage_account_name       = azurerm_storage_account.storage.name
+  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+}
+
 resource "azurerm_app_configuration" "products_config" {
   location            = "polandcentral"
   name                = "psc-nuq-epm-2024"
+  sku                 = "free"
   resource_group_name = azurerm_resource_group.training.name
-
-  sku = "free"
 }
 
 resource "azurerm_api_management" "core_apim" {
@@ -234,7 +242,7 @@ resource "azurerm_api_management_api_operation" "http_get_product_list" {
   url_template        = "/products"
 }
 
-resource "azurerm_api_management_api_operation" http-post-product" {
+resource "azurerm_api_management_api_operation" "http-post-product" {
   api_management_name = azurerm_api_management.core_apim.name
   api_name            = azurerm_api_management_api.products_api.name
   display_name        = "Add Product"
@@ -248,7 +256,7 @@ resource "azurerm_windows_function_app" "products_service" {
   name     = "fa-nuq-epm-2024"
   location = "polandcentral"
 
-  service_plan_id     = azurerm_service_plan.product_service_plan.id
+  service_plan_id     = azurerm_app_service_plan.product_service_plan.id
   resource_group_name = azurerm_resource_group.training.name
 
   storage_account_name       = azurerm_storage_account.storage.name

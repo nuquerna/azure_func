@@ -1,13 +1,13 @@
-import { AzureFunction, Context, HttpRequest } from "@azure/functions";
+import { AzureFunction, Context } from "@azure/functions";
 import { CosmosClient } from "@azure/cosmos";
+import { Product, Stock } from "../types";
 
 const endpoint = process.env.COSMOS_DB_URL;
 const key = process.env.COSMOS_DB_KEY;
 const client = new CosmosClient({ endpoint, key });
 
 const httpTrigger: AzureFunction = async function (
-  context: Context,
-  req: HttpRequest
+  context: Context
 ): Promise<void> {
   const databaseId = "products-db";
   const productContainerId = "products";
@@ -29,12 +29,14 @@ const httpTrigger: AzureFunction = async function (
     .fetchAll();
   const stockQueryResponse = await stockContainer.items.query(query).fetchAll();
 
-  const products = productQueryResponse.resources;
-  const stocks = stockQueryResponse.resources;
+  const products = productQueryResponse.resources as Product[];
+  const stocks = stockQueryResponse.resources as Stock[];
 
   products.forEach((product) => {
-    const productStock = stocks.find((stock) => stock.productId === product.id);
-    product.stock = productStock ? productStock.quantity : 0;
+    const productStock = stocks.find(
+      (stock) => stock.product_id === product.id
+    );
+    product.stock = productStock ? productStock.count : 0;
   });
 
   context.res = {
