@@ -13,13 +13,13 @@ const httpTrigger: AzureFunction = async function (
   const containerId = "products";
 
   const container = client.database(databaseId).container(containerId);
-
-  const id = req.params.productId;
-  const { resource: product } = await container.item(id).read();
-
+  
+  const product = req.body;
+  const { resource: createdProduct } = await container.items.create(product);
+  
   context.res = {
-    status: 200,
-    body: product,
+    status: 200, 
+    body: createdProduct,
   };
 };
 
