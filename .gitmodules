@@ -1,0 +1,3 @@
+[submodule "shop-react-redux-cloudfront"]
+	path = shop-react-redux-cloudfront
+	url = https://github.com/nuquerna/shop-react-redux-cloudfront
