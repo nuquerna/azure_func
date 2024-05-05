@@ -19,12 +19,26 @@ provider "azurerm" {
 
 resource "azurerm_resource_group" "training" {
   name     = "rg-nuq-epm-2024"
-  location = "polandcentral"
+  location = "northeurope"
+}
+
+resource "azurerm_storage_account" "storage" {
+  name                     = var.container_name
+  location                 = "northeurope"
+
+  account_replication_type = "LRS"
+  account_tier             = "Standard"
+  account_kind             = "StorageV2"
+  resource_group_name      = azurerm_resource_group.training.name
+
+  static_website {
+    index_document = "index.html"
+  }
 }
 
 resource "azurerm_cosmosdb_account" "cosmo" {
-  location            = "polandcentral"
-  name                = "cos-nuq-epm-2024"
+  location            = "northeurope"
+  name                = "cosmos-nuq-epm-2024"
   offer_type          = "Standard"
   resource_group_name = azurerm_resource_group.training.name
   kind                = "GlobalDocumentDB"
@@ -39,7 +53,7 @@ resource "azurerm_cosmosdb_account" "cosmo" {
 
   geo_location {
     failover_priority = 0
-    location          = "Poland Central"
+    location          = "North Europe"
   }
 }
 
@@ -83,36 +97,22 @@ resource "azurerm_cosmosdb_sql_container" "stock" {
   }
 }
 
-resource "azurerm_storage_account" "storage" {
-  name                     = var.container_name
-  location                 = "polandcentral"
+# resource "azurerm_log_analytics_workspace" "law" {
+#   name                = "ws-nuq-epm-2024"
+#   location            = "northeurope"
+#   resource_group_name = azurerm_resource_group.training.name
+#   sku                 = "PerGB2018"
+#   retention_in_days   = 30
+# }
 
-  account_replication_type = "LRS"
-  account_tier             = "Standard"
-  account_kind             = "StorageV2"
-  resource_group_name      = azurerm_resource_group.training.name
+# resource "azurerm_application_insights" "products_service_fa" {
+#   name             = "appins-nuq-epm-2024"
+#   application_type = "web"
+#   location         = "northeurope"
 
-  static_website {
-    index_document = "index.html"
-  }
-}
-
-resource "azurerm_log_analytics_workspace" "law" {
-  name                = "workspace-nuq-epm-2024"
-  location            = "polandcentral"
-  resource_group_name = azurerm_resource_group.training.name
-  sku                 = "Free"
-  retention_in_days   = 30
-}
-
-resource "azurerm_application_insights" "products_service_fa" {
-  name             = "appins-nuq-epm-2024"
-  application_type = "web"
-  location         = "polandcentral"
-
-  resource_group_name = azurerm_resource_group.training.name
-  workspace_id = azurerm_log_analytics_workspace.law.id
-}
+#   resource_group_name = azurerm_resource_group.training.name
+#   # workspace_id = azurerm_log_analytics_workspace.law.id
+# }
 
 resource "azurerm_storage_share" "products_service_fa" {
   name  = "fa-products-service-share"
@@ -121,41 +121,49 @@ resource "azurerm_storage_share" "products_service_fa" {
   storage_account_name = azurerm_storage_account.storage.name
 }
 
-resource "azurerm_app_service_plan" "product_service_plan" {
-  name                = "sp-nuq-epm-2024"
-  location            = "polandcentral"
+resource "azurerm_service_plan" "product_service_plan" {
+  name                = "asp-nuq-epm-2024"
+  location            = azurerm_resource_group.training.location
+  os_type             = "Windows"
+  sku_name            = "Y1"
+
   resource_group_name = azurerm_resource_group.training.name
+}
 
-  kind = "FunctionApp"
-  
-  sku {
-    size = "Y1"
-    tier = "Dynamic"
-  } 
+# resource "azurerm_function_app" "product_service_plan_function" {
+#   name                       = "sp-nuq-epm-2024-function"
+#   location                   = "northeurope"
+#   resource_group_name        = azurerm_resource_group.training.name
+#   app_service_plan_id        = azurerm_service_plan.product_service_plan.id
+#   storage_account_name       = azurerm_storage_account.storage.name
+#   storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+# }
 
-  tags = {
-    environment = "training"
+resource "azurerm_function_app" "function_app" {
+  name                      = "sp-nuq-epm-2024-function"
+  location                   = "northeurope"
+  resource_group_name        = azurerm_resource_group.training.name
+  app_service_plan_id        = azurerm_service_plan.product_service_plan.id
+  storage_account_name       = azurerm_storage_account.storage.name
+  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+  os_type                   = "linux"
+  enabled                   = true
+  version                   = "~3"
+
+  site_config {
+    always_on        = true
   }
 }
 
-resource "azurerm_function_app" "product_service_plan_function" {
-  name                       = "sp-nuq-epm-2024-function"
-  location                   = "polandcentral"
-  resource_group_name        = azurerm_resource_group.training.name
-  app_service_plan_id        = azurerm_app_service_plan.product_service_plan.id
-  storage_account_name       = azurerm_storage_account.storage.name
-  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
-}
-
 resource "azurerm_app_configuration" "products_config" {
-  location            = "polandcentral"
+  location            = "northeurope"
   name                = "psc-nuq-epm-2024"
   sku                 = "free"
   resource_group_name = azurerm_resource_group.training.name
 }
 
 resource "azurerm_api_management" "core_apim" {
-  location        = "polandcentral"
+  location        = "northeurope"
   name            = "rg-ps-nuq-epm-2024"
   publisher_email = "pavel_kastsiuk1@epam.com"
   publisher_name  = "Pavel Kastsiuk"
@@ -229,7 +237,7 @@ resource "azurerm_api_management_api_operation" "http_get_product" {
   method              = "GET"
   operation_id        = "getProduct"
   resource_group_name = azurerm_resource_group.training.name
-  url_template        = "/products/{productId}"
+  url_template        = "products/{productId}"
 }
 
 resource "azurerm_api_management_api_operation" "http_get_product_list" {
@@ -254,9 +262,9 @@ resource "azurerm_api_management_api_operation" "http-post-product" {
 
 resource "azurerm_windows_function_app" "products_service" {
   name     = "fa-nuq-epm-2024"
-  location = "polandcentral"
+  location = "northeurope"
 
-  service_plan_id     = azurerm_app_service_plan.product_service_plan.id
+  service_plan_id     = azurerm_service_plan.product_service_plan.id
   resource_group_name = azurerm_resource_group.training.name
 
   storage_account_name       = azurerm_storage_account.storage.name
@@ -268,8 +276,8 @@ resource "azurerm_windows_function_app" "products_service" {
   site_config {
     always_on = false
 
-    application_insights_key               = azurerm_application_insights.products_service_fa.instrumentation_key
-    application_insights_connection_string = azurerm_application_insights.products_service_fa.connection_string
+    # application_insights_key               = azurerm_application_insights.products_service_fa.instrumentation_key
+    # application_insights_connection_string = azurerm_application_insights.products_service_fa.connection_string
     use_32_bit_worker = true
 
     cors {
