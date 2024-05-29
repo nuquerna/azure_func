@@ -17,93 +17,165 @@ provider "azurerm" {
   features {}
 }
 
-resource "azurerm_resource_group" "product_service_rg" {
-  location = "northeurope"
-  name     = "rg-product-service-sand-ne-0024"
-}
-
-resource "azurerm_resource_group" "front_end_rg" {
-  name     = "rg-frontend-sand-ne-0024"
+resource "azurerm_resource_group" "training" {
+  name     = "rg-nuq-epm-2024"
   location = "northeurope"
 }
 
-# resource "azurerm_resource_group" "apim" {
-#   name     = "rg-apim-sand-ne-0024"
-#   location = "northeurope"
-# }
-
-# resource "azurerm_storage_account" "front_end_storage_account" {
-#   name                     = var.container_name
-#   location                 = "northeurope"
-
-#   account_replication_type = "LRS"
-#   account_tier             = "Standard"
-#   account_kind             = "StorageV2"
-#   resource_group_name      = azurerm_resource_group.front_end_rg.name
-
-#   static_website {
-#     index_document = "index.html"
-#   }
-# }
-
-resource "azurerm_storage_account" "products_service_fa" {
-  name     = "stgsangproductsfane0024"
-  location = "northeurope"
+resource "azurerm_storage_account" "storage" {
+  name                     = var.container_name
+  location                 = "northeurope"
 
   account_replication_type = "LRS"
   account_tier             = "Standard"
   account_kind             = "StorageV2"
+  resource_group_name      = azurerm_resource_group.training.name
 
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  static_website {
+    index_document = "index.html"
+  }
 }
+
+resource "azurerm_cosmosdb_account" "cosmo" {
+  location            = "northeurope"
+  name                = "cosmos-nuq-epm-2024"
+  offer_type          = "Standard"
+  resource_group_name = azurerm_resource_group.training.name
+  kind                = "GlobalDocumentDB"
+
+  consistency_policy {
+    consistency_level = "Eventual"
+  }
+
+  capabilities {
+    name = "EnableServerless"
+  }
+
+  geo_location {
+    failover_priority = 0
+    location          = "North Europe"
+  }
+}
+
+resource "azurerm_cosmosdb_sql_database" "products_app" {
+  account_name        = azurerm_cosmosdb_account.cosmo.name
+  name                = "products-db"
+  resource_group_name = azurerm_resource_group.training.name
+}
+
+resource "azurerm_cosmosdb_sql_container" "products" {
+  account_name        = azurerm_cosmosdb_account.cosmo.name
+  database_name       = azurerm_cosmosdb_sql_database.products_app.name
+  name                = "products"
+  partition_key_path  = "/id"
+  resource_group_name = azurerm_resource_group.training.name
+
+  # Cosmos DB supports TTL for the records
+  default_ttl = -1
+
+  indexing_policy {
+    excluded_path {
+      path = "/*"
+    }
+  }
+}
+
+resource "azurerm_cosmosdb_sql_container" "stock" {
+  account_name        = azurerm_cosmosdb_account.cosmo.name
+  database_name       = azurerm_cosmosdb_sql_database.products_app.name
+  name                = "stock"
+  partition_key_path  = "/id"
+  resource_group_name = azurerm_resource_group.training.name
+
+  # Cosmos DB supports TTL for the records
+  default_ttl = -1
+
+  indexing_policy {
+    excluded_path {
+      path = "/*"
+    }
+  }
+}
+
+# resource "azurerm_log_analytics_workspace" "law" {
+#   name                = "ws-nuq-epm-2024"
+#   location            = "northeurope"
+#   resource_group_name = azurerm_resource_group.training.name
+#   sku                 = "PerGB2018"
+#   retention_in_days   = 30
+# }
+
+# resource "azurerm_application_insights" "products_service_fa" {
+#   name             = "appins-nuq-epm-2024"
+#   application_type = "web"
+#   location         = "northeurope"
+
+#   resource_group_name = azurerm_resource_group.training.name
+#   # workspace_id = azurerm_log_analytics_workspace.law.id
+# }
 
 resource "azurerm_storage_share" "products_service_fa" {
   name  = "fa-products-service-share"
   quota = 2
 
-  storage_account_name = azurerm_storage_account.products_service_fa.name
+  storage_account_name = azurerm_storage_account.storage.name
 }
 
 resource "azurerm_service_plan" "product_service_plan" {
-  name     = "asp-product-service-sand-ne-0024"
-  location = "northeurope"
+  name                = "asp-nuq-epm-2024"
+  location            = azurerm_resource_group.training.location
+  os_type             = "Windows"
+  sku_name            = "Y1"
 
-  os_type  = "Windows"
-  sku_name = "Y1"
-
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
 }
 
-resource "azurerm_application_insights" "products_service_fa" {
-  name             = "appins-fa-products-service-sand-ne-0024"
-  application_type = "web"
-  location         = "northeurope"
+# resource "azurerm_function_app" "product_service_plan_function" {
+#   name                       = "sp-nuq-epm-2024-function"
+#   location                   = "northeurope"
+#   resource_group_name        = azurerm_resource_group.training.name
+#   app_service_plan_id        = azurerm_service_plan.product_service_plan.id
+#   storage_account_name       = azurerm_storage_account.storage.name
+#   storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+# }
 
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+resource "azurerm_function_app" "function_app" {
+  name                      = "sp-nuq-epm-2024-function"
+  location                   = "northeurope"
+  resource_group_name        = azurerm_resource_group.training.name
+  app_service_plan_id        = azurerm_service_plan.product_service_plan.id
+  storage_account_name       = azurerm_storage_account.storage.name
+  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+  os_type                   = "linux"
+  enabled                   = true
+  version                   = "~3"
+
+  site_config {
+    always_on        = true
+  }
 }
 
 resource "azurerm_app_configuration" "products_config" {
   location            = "northeurope"
-  name                = "appconfig-products-service-sand-ne-0024"
-  resource_group_name = azurerm_resource_group.product_service_rg.name
-
-  sku = "free"
+  name                = "psc-nuq-epm-2024"
+  sku                 = "free"
+  resource_group_name = azurerm_resource_group.training.name
 }
 
 resource "azurerm_api_management" "core_apim" {
   location        = "northeurope"
-  name            = "rg-product-service-sand-ne-0024"
+  name            = "rg-ps-nuq-epm-2024"
   publisher_email = "pavel_kastsiuk1@epam.com"
   publisher_name  = "Pavel Kastsiuk"
 
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
   sku_name            = "Consumption_0"
 }
 
 resource "azurerm_api_management_api" "products_api" {
   api_management_name = azurerm_api_management.core_apim.name
   name                = "products-service-api"
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
   revision            = "1"
 
   display_name = "Products Service API"
@@ -113,12 +185,12 @@ resource "azurerm_api_management_api" "products_api" {
 
 data "azurerm_function_app_host_keys" "products_keys" {
   name = azurerm_windows_function_app.products_service.name
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
 }
 
 resource "azurerm_api_management_backend" "products_fa" {
   name = "products-service-backend"
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
   api_management_name = azurerm_api_management.core_apim.name
   protocol = "http"
   url = "https://${azurerm_windows_function_app.products_service.name}.azurewebsites.net/api"
@@ -137,36 +209,36 @@ resource "azurerm_api_management_backend" "products_fa" {
 resource "azurerm_api_management_api_policy" "api_policy" {
   api_management_name = azurerm_api_management.core_apim.name
   api_name            = azurerm_api_management_api.products_api.name
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
 
   xml_content = <<XML
- <policies>
+  <policies>
     <inbound>
-        <set-backend-service backend-id="${azurerm_api_management_backend.products_fa.name}"/>
-        <base/>
+      <set-backend-service backend-id="${azurerm_api_management_backend.products_fa.name}"/>
+      <base/>
     </inbound>
     <backend>
-        <base/>
+      <base/>
     </backend>
     <outbound>
-        <base/>
+      <base/>
     </outbound>
     <on-error>
-        <base/>
+      <base/>
     </on-error>
- </policies>
-XML
+  </policies>
+  XML
 }
 
-# resource "azurerm_api_management_api_operation" "http_get_product" {
-#   api_management_name = azurerm_api_management.core_apim.name
-#   api_name            = azurerm_api_management_api.products_api.name
-#   display_name        = "Get Product"
-#   method              = "GET"
-#   operation_id        = "getProduct"
-#   resource_group_name = azurerm_resource_group.product_service_rg.name
-#   url_template        = "/products/{productId}"
-# }
+resource "azurerm_api_management_api_operation" "http_get_product" {
+  api_management_name = azurerm_api_management.core_apim.name
+  api_name            = azurerm_api_management_api.products_api.name
+  display_name        = "Get Product"
+  method              = "GET"
+  operation_id        = "getProduct"
+  resource_group_name = azurerm_resource_group.training.name
+  url_template        = "products/{productId}"
+}
 
 resource "azurerm_api_management_api_operation" "http_get_product_list" {
   api_management_name = azurerm_api_management.core_apim.name
@@ -174,20 +246,29 @@ resource "azurerm_api_management_api_operation" "http_get_product_list" {
   display_name        = "Get Product list"
   method              = "GET"
   operation_id        = "getProductList"
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
   url_template        = "/products"
 }
 
+resource "azurerm_api_management_api_operation" "http-post-product" {
+  api_management_name = azurerm_api_management.core_apim.name
+  api_name            = azurerm_api_management_api.products_api.name
+  display_name        = "Add Product"
+  method              = "Post"
+  operation_id        = "postProduct"
+  resource_group_name = azurerm_resource_group.training.name
+  url_template        = "/products"
+}
 
 resource "azurerm_windows_function_app" "products_service" {
-  name     = "fa-products-service-ne-0024"
+  name     = "fa-nuq-epm-2024"
   location = "northeurope"
 
   service_plan_id     = azurerm_service_plan.product_service_plan.id
-  resource_group_name = azurerm_resource_group.product_service_rg.name
+  resource_group_name = azurerm_resource_group.training.name
 
-  storage_account_name       = azurerm_storage_account.products_service_fa.name
-  storage_account_access_key = azurerm_storage_account.products_service_fa.primary_access_key
+  storage_account_name       = azurerm_storage_account.storage.name
+  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
 
   functions_extension_version = "~4"
   builtin_logging_enabled     = false
@@ -195,24 +276,20 @@ resource "azurerm_windows_function_app" "products_service" {
   site_config {
     always_on = false
 
-    application_insights_key               = azurerm_application_insights.products_service_fa.instrumentation_key
-    application_insights_connection_string = azurerm_application_insights.products_service_fa.connection_string
-
-    # For production systems set this to false, but consumption plan supports only 32bit workers
+    # application_insights_key               = azurerm_application_insights.products_service_fa.instrumentation_key
+    # application_insights_connection_string = azurerm_application_insights.products_service_fa.connection_string
     use_32_bit_worker = true
 
-    # Enable function invocations from Azure Portal.
     cors {
       allowed_origins = ["https://portal.azure.com"]
     }
-
     application_stack {
       node_version = "~16"
     }
   }
 
-  app_settings = {
-    WEBSITE_CONTENTAZUREFILECONNECTIONSTRING = azurerm_storage_account.products_service_fa.primary_connection_string
+ app_settings = {
+    WEBSITE_CONTENTAZUREFILECONNECTIONSTRING = azurerm_storage_account.storage.primary_connection_string
     WEBSITE_CONTENTSHARE                     = azurerm_storage_share.products_service_fa.name
   }
 

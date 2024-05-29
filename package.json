@@ -1,19 +1,25 @@
 {
-  "name": "",
+  "name": "azure",
   "version": "1.0.0",
   "description": "",
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
     "prestart": "npm run build",
-    "start": "func start",
+    "start": "npm run build && func start",
+    "populateDb": "node populateDb.js",
     "test": "echo \"No tests yet...\""
   },
-  "dependencies": {},
+  "dependencies": {
+    "@azure/cosmos": "^4.0.0",
+    "dotenv": "^16.4.5",
+    "faker": "^5.5.3"
+  },
   "devDependencies": {
-    "@azure/functions": "^3.0.0",
-    "azure-functions-core-tools": "^4.x",
+    "@azure/functions": "^4.0.0",
+    "@types/faker": "^6.6.9",
     "@types/node": "18.x",
+    "azure-functions-core-tools": "^4.x",
     "typescript": "^4.0.0"
   }
 }
